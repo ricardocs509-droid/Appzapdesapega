@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Zap Desapego Pro</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; font-family: system-ui, -apple-system, sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 antialiased flex justify-center min-h-screen">
+
+    <div id="root" class="w-full max-w-md bg-slate-950 min-h-screen shadow-2xl relative flex flex-col border-x border-slate-800"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // CONFIGURAÇÃO DA SUA CHAVE PIX (Pode ser CPF, Celular ou E-mail)
+        const MINHA_CHAVE_PIX = "03976490539";
+
+        function App() {
+            // Estados Gerais
+            const [aba, setAba] = useState("home"); 
+            const [usuarioLogado, setUsuarioLogado] = useState(null);
+            const [produtos, setProdutos] = useState([]);
+            const [usuarios, setUsuarios] = useState([]);
+            
+            // Filtros e Busca
+            const [busca, setBusca] = useState("");
+            const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
+
+            // Modais
+            const [modalAuth, setModalAuth] = useState(false);
+            const [modalAnuncio, setModalAnuncio] = useState(false);
+            const [modalImpulsionar, setModalImpulsionar] = useState(false);
+            const [produtoFoco, setProdutoFoco] = useState(null);
+
+            // Formulários
+            const [isCadastro, setIsCadastro] = useState(false);
+            const [fNome, setFNome] = useState("");
+            const [fEmail, setFEmail] = useState("");
+            const [fSenha, setFSenha] = useState("");
+
+            // Novo Anúncio
+            const [nTulo, setNTulo] = useState("");
+            const [nPreco, setNPreco] = useState("");
+            const [nDesc, setNDesc] = useState("");
+            const [nZap, setNZap] = useState("");
+            const [nCat, setNCat] = useState("Eletrônicos");
+            const [nCond, setNCond] = useState("Usado");
+            const [nFotos, setNFotos] = useState([]); // Array para até 3 fotos
+
+            // Controle do Pix
+            const [idAlvoDestaque, setIdAlvoDestaque] = useState(null);
+            const [txtPix, setTxtPix] = useState("");
+            const [valorSelecionado, setValorSelecionado] = useState(0);
+
+            // Inicialização do Banco de Dados Local
+            useEffect(() => {
+                const localProd = localStorage.getItem("z_pro_prod");
+                const localUser = localStorage.getItem("z_pro_user");
+                const localSess = localStorage.getItem("z_pro_sess");
+
+                if (localProd) setProdutos(JSON.parse(localProd));
+                if (localUser) setUsuarios(JSON.parse(localUser));
+                if (localSess) setUsuarioLogado(JSON.parse(localSess));
+            }, []);
+
+            const atualizarProdutos = (lista) => {
+                setProdutos(lista);
+                localStorage.setItem("z_pro_prod", JSON.stringify(lista));
+            };
+
+            // Login e Cadastro Avançado
+            const executarAuth = () => {
+                if (!fEmail || !fSenha) return alert("Por favor, preencha as credenciais.");
+
+                if (fEmail.toLowerCase() === "admin@admin.com" && fSenha === "123456") {
+                    const adminObj = { id: "admin", nome: "Gerente Geral", email: "admin@admin.com", nivel: "admin" };
+                    setUsuarioLogado(adminObj);
+                    localStorage.setItem("z_pro_sess", JSON.stringify(adminObj));
+                    setModalAuth(false);
+                    setAba("admin");
+                    return;
+                }
+
+                if (isCadastro) {
+                    if (!fNome) return alert("Digite o seu nome.");
+                    if (usuarios.some(u => u.email === fEmail.toLowerCase())) return alert("E-mail já cadastrado.");
+
+                    const novoU = { id: "u_" + Date.now(), nome: fNome, email: fEmail.toLowerCase(), senha: fSenha, nivel: "user" };
+                    const novaListaU = [...usuarios, novoU];
+                    setUsuarios(novaListaU);
+                    localStorage.setItem("z_pro_user", JSON.stringify(novaListaU));
+                    setUsuarioLogado(novoU);
+                    localStorage.setItem("z_pro_sess", JSON.stringify(novoU));
+                } else {
+                    const user = usuarios.find(u => u.email === fEmail.toLowerCase() && u.senha === fSenha);
+                    if (!user) return alert("Usuário ou senha incorretos.");
+                    setUsuarioLogado(user);
+                    localStorage.setItem("z_pro_sess", JSON.stringify(user));
+                }
+
+                setModalAuth(false);
+                setFNome(""); setFEmail(""); setFSenha("");
+            };
+
+            // Upload Dinâmico e Otimização de Múltiplas Imagens
+            const processarImagens = (e) => {
+                const arquivos = Array.from(e.target.files);
+                if (arquivos.length + nFotos.length > 3) {
+                    alert("Você pode adicionar no máximo 3 fotos por anúncio.");
+                    return;
+                }
+
+                arquivos.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement("canvas");
+                            const MAX_DIMEN = 500;
+                            let w = img.width;
+                            let h = img.height;
+
+                            if (w > h ? w > MAX_DIMEN : h > MAX_DIMEN) {
+                                if (w > h) { h *= MAX_DIMEN / w; w = MAX_DIMEN; }
+                                else { w *= MAX_DIMEN / h; h = MAX_DIMEN; }
+                            }
+
+                            canvas.width = w;
+                            canvas.height = h;
+                            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+                            const base64 = canvas.toDataURL("image/jpeg", 0.65);
+                            setNFotos(prev => [...prev, base64]);
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+            };
+
+            // Publicar Anúncio Novo
+            const criarAnuncio = () => {
+                if (!nTulo || !nPreco || !nZap) return alert("Preencha os campos obrigatórios (*)");
+
+                const item = {
+                    id: "p_" + Date.now(),
+                    userId: usuarioLogado.id,
+                    autor: usuarioLogado.nome,
+                    titulo: nTulo,
+                    preco: parseFloat(nPreco),
+                    descricao: nDesc,
+                    categoria: nCat,
+                    condicao: nCond,
+                    whatsapp: nZap.replace(/\D/g, ""),
+                    fotos: nFotos,
+                    destaque: false,
+                    solicitado: false
+                };
+
+                atualizarProdutos([...produtos, item]);
+                setModalAnuncio(false);
+                // Resetar Form
+                setNTulo(""); setNPreco(""); setNDesc(""); setNZap(""); setNFotos([]);
+                setAba("explorar");
+            };
+
+            // Criador Inteligente de Payload de Pix Estático
+            const gerarPixCopiaCola = (valor, rotulo) => {
+                setValorSelecionado(valor);
+                const vStr = valor.toFixed(2);
+                const vLen = vStr.length.toString().padStart(2, '0');
+                const cLen = MINHA_CHAVE_PIX.length.toString().padStart(2, '0');
+
+                let payload = "00020126" + (30 + MINHA_CHAVE_PIX.length) + "0014BR.GOV.BCB.PIX01" + cLen + MINHA_CHAVE_PIX;
+                payload += "52040000530398654" + vLen + vStr + "5802BR5912ZAPDESAPEGOP6009SAOPAULO62110507" + rotulo.substring(0,7);
+                payload += "6304E1E2"; 
+
+                setTxtPix(payload);
+            };
+
+            const concluirPedidoDestaque = () => {
+                const alterados = produtos.map(p => p.id === idAlvoDestaque ? { ...p, solicitado: true } : p);
+                atualizarProdutos(alterados);
+                setModalImpulsionar(false);
+                alert("Aviso de pagamento enviado! Aguarde a liberação do Administrador.");
+            };
+
+            const deletarAnuncio = (id) => {
+                if (confirm("Deseja apagar este anúncio permanentemente?")) {
+                    atualizarProdutos(produtos.filter(p => p.id !== id));
+                }
+            };
+
+            // Filtros aplicados
+            const itensFiltrados = produtos.filter(p => {
+                const buscaOk = p.titulo.toLowerCase().includes(busca.toLowerCase()) || p.descricao.toLowerCase().includes(busca.toLowerCase());
+                const catOk = categoriaAtiva === "Todos" || p.categoria === categoriaAtiva;
+                return buscaOk && catOk;
+            });
+
+            // Ordenação (Premium primeiro)
+            const itensOrdenados = [...itensFiltrados].sort((a, b) => (b.destaque ? 1 : 0) - (a.destaque ? 1 : 0));
+
+            return (
+                <div class="flex flex-col flex-grow pb-24">
+                    
+                    {/* TOPO ESTILIZADO */}
+                    <header class="p-4 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 flex justify-between items-center border-b border-slate-900">
+                        <div onClick={() => setAba("home")} class="flex items-center gap-2 cursor-pointer">
+                            <span class="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center font-black text-white text-xs shadow-md shadow-blue-500/30">Z</span>
+                            <span class="text-base font-black tracking-tight text-white">Zap<span class="text-blue-500">Desapego</span></span>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            {usuarioLogado?.nivel === "admin" && (
+                                <button onClick={() => setAba("admin")} class="text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-1 rounded-md">Painel</button>
+                            )}
+                            {usuarioLogado ? (
+                                <button onClick={() => { setUsuarioLogado(null); localStorage.removeItem("z_pro_sess"); setAba("home"); }} class="text-[10px] font-bold bg-slate-800 text-slate-300 px-2 py-1 rounded-md">Sair</button>
+                            ) : (
+                                <button onClick={() => { setIsCadastro(false); setModalAuth(true); }} class="text-[11px] font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg shadow-xs">Entrar</button>
+                            )}
+                        </div>
+                    </header>
+
+                    {/* CONTEÚDO DINÂMICO */}
+                    <div class="flex-grow">
+                        
+                        {/* ABA: HOME */}
+                        {aba === "home" && (
+                            <div class="p-4 space-y-6">
+                                {/* Banner Inicial */}
+                                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                                    <div class="absolute -right-8 -bottom-8 w-28 h-28 bg-white/10 rounded-full blur-xl"></div>
+                                    <h2 class="text-2xl font-extrabold text-white leading-tight">O jeito mais fácil de desapegar no seu bairro</h2>
+                                    <p class="text-xs text-blue-100 mt-2 opacity-90">Anuncie com fotos reais, destaque seus produtos e receba propostas direto no seu WhatsApp de forma profissional.</p>
+                                    <button onClick={() => { if(!usuarioLogado) setModalAuth(true); else setModalAnuncio(true); }} class="mt-4 bg-white text-blue-700 font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition active:scale-95">⚡ Criar Anúncio Agora</button>
+                                </div>
+
+                                {/* Contador de Estatísticas */}
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div class="bg-slate-900 border border-slate-800/60 rounded-xl p-3 text-center">
+                                        <span class="text-lg font-black text-blue-400 block">{produtos.length + 8}</span>
+                                        <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Ativos</span>
+                                    </div>
+                                    <div class="bg-slate-900 border border-slate-800/60 rounded-xl p-3 text-center">
+                                        <span class="text-lg font-black text-emerald-400 block">{Math.floor(produtos.length * 0.4) + 5}</span>
+                                        <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Vendidos</span>
+                                    </div>
+                                    <div class="bg-slate-900 border border-slate-800/60 rounded-xl p-3 text-center">
+                                        <span class="text-lg font-black text-amber-400 block">{produtos.filter(p => p.destaque).length + 2}</span>
+                                        <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Premium</span>
+                                    </div>
+                                </div>
+
+                                {/* Vitrine de Destaques */}
+                                <div>
+                                    <div class="flex justify-between items-center mb-3">
+                                        <h3 class="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">⭐ Destaques Recentes</h3>
+                                        <button onClick={() => setAba("explorar")} class="text-xs text-blue-400 font-bold">Ver todos</button>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-3">
+                                        {produtos.filter(p => p.destaque).slice(0, 4).map(p => (
+                                            <div key={p.id} onClick={() => setProdutoFoco(p)} class="bg-slate-900 border border-amber-500/40 rounded-xl p-2 relative cursor-pointer">
+                                                <span class="absolute top-1.5 left-1.5 bg-amber-500 text-slate-950 font-black text-[7px] px-1.5 py-0.5 rounded uppercase z-10">Destaque</span>
+                                                <div class="aspect-square bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center">
+                                                    {p.fotos && p.fotos[0] ? <img src={p.fotos[0]} class="w-full h-full object-cover"/> : <span class="text-xl">📦</span>}
+                                                </div>
+                                                <h4 class="text-xs font-bold mt-2 truncate text-slate-200">{p.titulo}</h4>
+                                                <p class="text-blue-400 font-black text-xs mt-0.5">R$ {p.preco.toFixed(2)}</p>
+                                            </div>
+                                        ))}
+                                        {produtos.filter(p => p.destaque).length === 0 && (
+                                            <div class="col-span-2 text-center py-8 text-xs text-slate-600 border border-dashed border-slate-800 rounded-xl">Nenhum anúncio premium em exibição.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ABA: EXPLORAR (Feed de Anúncios) */}
+                        {aba === "explorar" && (
+                            <div class="p-4 space-y-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="🔍 O que você está procurando hoje?..." 
+                                    value={busca}
+                                    onChange={e => setBusca(e.target.value)}
+                                    class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 shadow-inner"
+                                />
+
+                                {/* Categorias */}
+                                <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                    {["Todos", "Eletrônicos", "Roupas", "Móveis", "Outros"].map(c => (
+                                        <button 
+                                            key={c} 
+                                            onClick={() => setCategoriaAtiva(c)}
+                                            class={`text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${categoriaAtiva === c ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-400'}`}
+                                        >
+                                            {c}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Lista principal */}
+                                <div class="space-y-3">
+                                    {itensOrdenados.map(p => (
+                                        <div key={p.id} class={`p-3 rounded-xl bg-slate-900 border flex gap-3 relative ${p.destaque ? 'border-amber-500/40 bg-gradient-to-r from-slate-900 to-amber-950/10' : 'border-slate-800/70'}`}>
+                                            {p.destaque && <span class="absolute top-2 right-2 bg-amber-500 text-slate-950 font-black text-[7px] px-1.5 py-0.5 rounded uppercase">TOP</span>}
+                                            
+                                            <div onClick={() => setProdutoFoco(p)} class="w-20 h-20 bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center shrink-0 cursor-pointer">
+                                                {p.fotos && p.fotos[0] ? <img src={p.fotos[0]} class="w-full h-full object-cover"/> : <span class="text-xl">📦</span>}
+                                            </div>
+
+                                            <div class="flex flex-col justify-between flex-grow min-w-0">
+                                                <div onClick={() => setProdutoFoco(p)} class="cursor-pointer">
+                                                    <h4 class="text-xs font-bold text-slate-200 truncate">{p.titulo}</h4>
+                                                    <p class="text-[10px] text-slate-500 truncate mt-0.5">{p.condicao} • Por {p.autor}</p>
+                                                    <p class="text-sm font-black text-blue-400 mt-1">R$ {p.preco.toFixed(2)}</p>
+                                                </div>
+
+                                                <a 
+                                                    href={`https://wa.me/55${p.whatsapp}?text=Olá! 
